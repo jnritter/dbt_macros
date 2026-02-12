@@ -60,13 +60,22 @@ when matched then update set
 {%- endmacro -%}
 
 
-{%- macro snapshot_date_grain(entity_key, snapshot_ref, valid_from_date_col_names=['dbt_valid_from','start_date'], valid_to_date_col_name['dbt_valid_to','end_date'], end_date_default = '9999-12-31') -%}
+{%- macro snapshot_to_scd2(entity_key, snapshot_ref, valid_from_date_col_names=['dbt_valid_from','start_date'], valid_to_date_col_names=['dbt_valid_to','end_date'], end_date_default='9999-12-31') -%}
 
-  select 
-    to_date({{ valid_from_date_col_names }}[0]) as '{{ valid_from_date_col_names }}[1]'
-    coalesce(dateadd(day, -1, lag({{ valid_from_date_col_names }}[1]) over(partition by {{ entity_key }} order by {{ valid_from_date_col_names }}[1] desc)), to_date('{{ end_date_default }}')) as {{ valid_to_date_col_names }}[1],
-    * except ({{ valid_from_date_col_names }}[0], {{ valid_to_date_col_names }}[0])
+{# This macro is for standardizing a dbt snapshot into a date-delineated Type II SCD table. 
+  Call this instead of a normal ref() call in your model. 
+  The entity_key parameter should be at the grain of the entities whose history is being tracked.
+  The snapshot_ref parameter should be the name of the snapshot table.
+  The valid_from_date_col_names parameter should be the name of the column that contains the valid from date.
+  The valid_to_date_col_names parameter should be the name of the column that contains the valid to date.
+  The end_date_default parameter should be the default value for the valid to date.
+  #}
+
+  select
+    to_date({{ valid_from_date_col_names[0] }}) as {{ valid_from_date_col_names[1] }},
+    coalesce(dateadd(day, -1, lag({{ valid_from_date_col_names[1] }}) over(partition by {{ entity_key }} order by {{ valid_from_date_col_names[1] }} desc)), to_date('{{ end_date_default }}')) as {{ valid_to_date_col_names[1] }},
+    * except ({{ valid_from_date_col_names[0] }}, {{ valid_to_date_col_names[0] }})
   from {{ snapshot_ref }}
-  qualify row_number() over(partition by {{ entity_key }}, to_date({{ valid_from_date_col_names }}[0]) order by {{ valid_from_date_col_names }}[0] desc) = 1
-  
+  qualify row_number() over(partition by {{ entity_key }}, to_date({{ valid_from_date_col_names[0] }}) order by {{ valid_from_date_col_names[0] }} desc) = 1
+
 {%- endmacro -%}
