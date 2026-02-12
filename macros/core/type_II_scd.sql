@@ -58,3 +58,15 @@ when matched then update set
 {% endif %}
 
 {%- endmacro -%}
+
+
+{%- macro snapshot_date_grain(entity_key, snapshot_ref, valid_from_date_col_names=['dbt_valid_from','start_date'], valid_to_date_col_name['dbt_valid_to','end_date'], end_date_default = '9999-12-31') -%}
+
+  select 
+    to_date({{ valid_from_date_col_names }}[0]) as '{{ valid_from_date_col_names }}[1]'
+    coalesce(dateadd(day, -1, lag({{ valid_from_date_col_names }}[1]) over(partition by {{ entity_key }} order by {{ valid_from_date_col_names }}[1] desc)), to_date('{{ end_date_default }}')) as {{ valid_to_date_col_names }}[1],
+    * except ({{ valid_from_date_col_names }}[0], {{ valid_to_date_col_names }}[0])
+  from {{ snapshot_ref }}
+  qualify row_number() over(partition by {{ entity_key }}, to_date({{ valid_from_date_col_names }}[0]) order by {{ valid_from_date_col_names }}[0] desc) = 1
+  
+{%- endmacro -%}
